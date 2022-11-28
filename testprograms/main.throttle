@@ -1,3 +1,4 @@
-proc main {
-    print(test)
-}
+proc main begin
+    var x = 3;
+    print("test");
+end

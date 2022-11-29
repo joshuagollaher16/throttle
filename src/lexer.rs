@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
+use crate::TokenKind::QuotedString;
 
 #[derive(Clone, Debug)]
 pub struct Span {
@@ -78,7 +79,10 @@ pub enum TokenKind {
 
     Proc,
     Var,
-
+    Return,
+    If,
+    Begin,
+    End,
 }
 
 pub fn lex(file: String) -> Vec<Token> {
@@ -126,6 +130,10 @@ pub fn lex(file: String) -> Vec<Token> {
         let token_kind = match acc.as_str() {
             "proc" => TokenKind::Proc,
             "var" => TokenKind::Var,
+            "return" => TokenKind::Return,
+            "if" => TokenKind::If,
+            "begin" => TokenKind::Begin,
+            "end" => TokenKind::End,
             _ => TokenKind::Name(acc.clone())
         };
 
@@ -133,8 +141,8 @@ pub fn lex(file: String) -> Vec<Token> {
     };
     let parse_single = |s: &String, index: usize| {
 
-        //['{', '}', '+', '-', '/', '*', '[', ']', '(', ')', ',', '.', ';', ':']
-        //FIXME: this is beyond awful. How did I even come up with this
+        //['{', '}', '+', '-', '/', '*', '[', ']', '(', ')', ',', '.', ';', ':', '=']
+        //FIXME: How did I even come up with this
         let token_kind = match *(s.as_bytes().iter().skip(index).take(1).collect::<Vec<_>>()[0]) {
             b'{' => TokenKind::LCurly,
             b'}' => TokenKind::RCurly,
@@ -150,13 +158,31 @@ pub fn lex(file: String) -> Vec<Token> {
             b'.' => TokenKind::Period,
             b';' => TokenKind::Semicolon,
             b':' => TokenKind::Colon,
+            b'=' => TokenKind::Equals,
             _ => unimplemented!()
         };
 
         token_kind
     };
 
-    let parse_quoted = || {};
+    let parse_quoted = |s: &String, index: usize| -> (String, usize) { // (String inside quotes, size including quotes)
+
+        let mut size = 1usize; // Including the left quote
+        let mut acc = String::from("");
+
+        for c in s.as_bytes().iter().skip(index + 1) { // + 1 to skip past the quote
+            let c = (*c) as char;
+
+            if c == '\"' {
+                size += 1;
+                break;
+            }
+
+            acc.push(c);
+            size += 1;
+        }
+        (acc, size)
+    };
 
     while index < file.len() {
         let c = file.as_bytes()[index] as char;
@@ -175,12 +201,20 @@ pub fn lex(file: String) -> Vec<Token> {
                 Token::new(token_kind, index, index + size, (fileId, Rc::clone(&fileRc)))
             );
             index += size;
-        } else if ['{', '}', '+', '-', '/', '*', '[', ']', '(', ')', ',', '.', ';', ':'].contains(&c) {
+        } else if ['{', '}', '+', '-', '/', '*', '[', ']', '(', ')', ',', '.', ';', ':', '='].contains(&c) {
             let token_kind = parse_single(&file, index);
             tokens.push(
                 Token::new(token_kind, index, index + 1, (fileId, Rc::clone(&fileRc)))
             );
             index += 1;
+        } else if c == '\"' {
+            let (string, size) = parse_quoted(&file, index);
+
+            tokens.push(
+                Token::new(QuotedString(string), index, size, (fileId, Rc::clone(&fileRc)))
+            );
+
+            index += size;
         } else {
             //Whitespace
             index += 1;
